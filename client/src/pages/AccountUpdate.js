@@ -7,19 +7,20 @@ import UpdateCustomer from "../components/UpdateCustomer";
 //Component responsable to update user's info.
 const AccountUpdate = ({ id }) => {
   const [data, setData] = useState({});
-
+  const [reload, setReload] = useState(false);
   //Get info to load page, User payment information, config API route in package.json "proxy"
 
   useEffect(() => {
     const setup = async () => {
       const result = await accountUpdate(id);
       if (result !== null) {
+        console.log(result);
         setData(result);
       }
     };
     setup();
-  }, [id]);
-  console.log("data", data);
+  }, [id, reload]);
+  // console.log("data", data);
   // if (!data?.email) return;
   return (
     <main className="main-lessons">
@@ -48,7 +49,13 @@ const AccountUpdate = ({ id }) => {
           <span id="card-last4"></span>
         </p>
       </div>
-      <UpdateCustomer />
+      <UpdateCustomer
+        name={data.name}
+        email={data.email}
+        customer_id={id}
+        payment_method={data.payment_method}
+        setReload={setReload}
+      />
     </main>
   );
 };

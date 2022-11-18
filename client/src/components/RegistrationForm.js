@@ -18,7 +18,7 @@ const RegistrationForm = ({ selected, details, sessions }) => {
   const [cardError, setCardError] = useState("");
   const [nameemail, setNameemail] = useState({});
   const handleCard = (e) => {
-    console.log("handlecard", e);
+    // console.log("handlecard", e);
     if (e.complete) {
       setLoading(false);
     } else {

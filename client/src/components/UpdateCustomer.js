@@ -1,8 +1,50 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "@reach/router";
-import { CardElement } from "@stripe/react-stripe-js";
+import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import axios from "axios";
+import { useEffect } from "react";
+let defaultInfo = {
+  name: "",
+  email: "",
+};
+const UpdateCustomer = ({
+  name,
+  email,
+  customer_id,
+  payment_method,
+  setReload,
+}) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [active, setActive] = useState(false);
+  const [userInfo, setUserInfo] = useState({});
+  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [disabled, setDisabled] = useState(true);
+  const [cardError, setCardError] = useState("");
+  const [nameemail, setNameemail] = useState(defaultInfo);
 
-const UpdateCustomer = () => {
+  useEffect(() => {
+    setNameemail({ ...nameemail, name, email });
+  }, [name, email]);
+
+  const handleCard = (e) => {
+    if (e.complete) {
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+  };
+
+  const handleReady = (e) => {
+    setDisabled(false);
+  };
+  // http://localhost:3000/account-update/cus_Mozc8lzOsERSRI
+
+  const handleChange = (e) => {
+    setNameemail({ ...nameemail, [e.target.name]: e.target.value });
+  };
   const handleSubmit = async (event) => {
     // We don't want to let default form submission happen here,
     // which would refresh the page.
@@ -10,9 +52,7 @@ const UpdateCustomer = () => {
     setCardError("");
     setProcessing(true);
     const card = elements?.getElement(CardElement);
-    const name = event.target.name.value;
-    const email = event.target.email.value;
-    // console.log(name, email);
+
     if (!stripe || !elements) {
       // Stripe.js has not yet loaded.
       // Make sure to disable form submission until Stripe.js has loaded.
@@ -23,25 +63,16 @@ const UpdateCustomer = () => {
       return;
     }
     try {
-      const { token, error } = await stripe.createToken(card);
-      if (error) {
-        throw error;
-      }
-      // console.log(token);
+      console.log("nameemail", nameemail);
 
-      const { data } = await axios.post("http://localhost:4242/lessons", {
-        name,
-        email,
-        token: token.id,
-        first_lesson: sessions[selected].title,
-      });
-
-      setUserInfo({
-        name,
-        email,
-        last4: token.card.last4,
-        customer_id: data.customer_id,
-      });
+      const { data } = await axios.post(
+        `http://localhost:4242/account-update/${customer_id}`,
+        {
+          name: nameemail.name,
+          email: nameemail.email,
+          payment_method,
+        }
+      );
 
       stripe
         .confirmCardSetup(data.clientSecret, {
@@ -56,6 +87,7 @@ const UpdateCustomer = () => {
         .then(function (result) {
           if (result.error) {
             // setActive(false);
+            console.log(result.error);
             setProcessing(false);
             setCardError(result.error.message);
             console.log(card);
@@ -63,12 +95,13 @@ const UpdateCustomer = () => {
             if (result.setupIntent.status === "succeeded") {
               setActive(true);
               setProcessing(false);
+              setReload((prevState) => !prevState);
             }
           }
         });
     } catch (error) {
       setProcessing(false);
-
+      console.log(error);
       if (error.response?.status === 403) {
         setUserInfo({
           ...userInfo,
@@ -76,7 +109,7 @@ const UpdateCustomer = () => {
         });
         setError(true);
       } else if (
-        error.response?.data.error.message == "Your card was declined."
+        error.response?.data.error?.message == "Your card was declined."
       ) {
         setCardError("Your card has been declined.");
       } else if (error.message) {
@@ -103,6 +136,7 @@ const UpdateCustomer = () => {
       },
     },
   };
+
   return (
     <div className="lesson-form">
       <form onSubmit={handleSubmit} className="lesson-desc">
@@ -116,17 +150,23 @@ const UpdateCustomer = () => {
               <input
                 type="text"
                 id="name"
+                name="name"
                 placeholder="Name"
+                value={nameemail.name}
                 autoComplete="cardholder"
                 className="sr-input"
+                onChange={handleChange}
               />
             </div>
             <div className="lesson-input-box">
               <input
                 type="text"
                 id="email"
+                name="email"
+                value={nameemail.email}
                 placeholder="Email"
                 autoComplete="cardholder"
+                onChange={handleChange}
               />
             </div>
             <div className="lesson-input-box">
@@ -139,18 +179,39 @@ const UpdateCustomer = () => {
               </div>
             </div>
           </div>
-          <div className="sr-field-error" id="card-errors" role="alert"></div>
+          <div className="sr-field-error" id="card-errors" role="alert">
+            {cardError}
+          </div>
           <div
             className="sr-field-error"
             id="customer-exists-error"
             role="alert"
-            hidden
-          ></div>
+            hidden={!error}
+          >
+            Customer email already exists
+          </div>
         </div>
-        <button id="submit" disabled>
-          <div className="spinner hidden" id="spinner"></div>
-          <span id="button-text">Save</span>
-        </button>
+        {!error && (
+          <button
+            id="submit"
+            type="submit"
+            disabled={
+              loading ||
+              disabled ||
+              processing ||
+              !nameemail?.name ||
+              !nameemail?.email
+            }
+          >
+            <div
+              className={`spinner ${!processing ? "hidden" : ""}`}
+              id="spinner"
+            ></div>
+            <span className={`${processing ? "hidden" : ""}`} id="button-text">
+              Save
+            </span>
+          </button>
+        )}
         <div className="lesson-legal-info">
           Your new card will be charged when you book your next session.
         </div>
