@@ -370,22 +370,22 @@ app.post("/refund-lesson", async (req, res) => {
 app.get("/account-update/:customer_id", async (req, res) => {
   try {
     const { customer_id } = req.params;
-    // const customer = await stripe.customers.retrieve(customer_id);
+    const customer = await stripe.customers.retrieve(customer_id);
     const paymentMethods = await stripe.customers.listPaymentMethods(
       customer_id,
       { type: "card" }
     );
-    const { billing_details, card, id } = paymentMethods.data[0];
+    const { card, id } = paymentMethods.data[0];
     // res.status(200).send(customer);
 
     //updated name and email is not comming here
     res.status(200).send({
       payment_method: id,
-      name: billing_details.name,
-      email: billing_details.email,
       exp_month: card.exp_month,
       exp_year: card.exp_year,
       last4: card.last4,
+      name: customer.name,
+      email: customer.email,
     });
   } catch (error) {
     console.log(error);
@@ -399,33 +399,41 @@ app.post("/account-update/:customer_id", async (req, res) => {
   try {
     const { customer_id } = req.params;
     const data = req.body;
-    const { name, email, payment_method } = data;
-    console.log(name, email, payment_method);
-    const customers = await stripe.customers.list({
-      email: email,
-      limit: 1,
-    });
-    // console.log("customers list", customers);
-
-    if (customers.data.length > 0) {
-      return res.status(403).json({
-        message: "Email already exist",
-        customer_id: customers.data[0].id,
+    const { name, email, payment_method, token, emailChanged } = data;
+    // console.log(name, email, payment_method);
+    if (emailChanged) {
+      const customers = await stripe.customers.list({
+        email: email,
+        limit: 1,
       });
+
+      if (customers.data.length > 0) {
+        return res.status(403).json({
+          message: "Email already exist",
+          customer_id: customers.data[0].id,
+        });
+      }
     }
+    // console.log("customers list", customers);
 
     const customer = await stripe.customers.update(customer_id, {
       name,
       email,
     });
+
     console.log("customer", customer);
     const paymentMethod = await stripe.paymentMethods.update(payment_method, {
       billing_details: { name, email },
     });
     console.log("paymentMethod", paymentMethod);
+
     const setupIntent = await stripe.setupIntents.create({
       customer: customer.id,
       payment_method_types: ["card"],
+    });
+
+    await stripe.customers.createSource(customer.id, {
+      source: token.id,
     });
     // const result = {customer}
     res.status(200).send({ clientSecret: setupIntent.client_secret });

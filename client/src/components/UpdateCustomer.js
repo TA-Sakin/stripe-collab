@@ -24,7 +24,7 @@ const UpdateCustomer = ({
   const [disabled, setDisabled] = useState(true);
   const [cardError, setCardError] = useState("");
   const [nameemail, setNameemail] = useState(defaultInfo);
-
+  const [emailChanged, setEmailChanged] = useState(false);
   useEffect(() => {
     setNameemail({ ...nameemail, name, email });
   }, [name, email]);
@@ -43,8 +43,17 @@ const UpdateCustomer = ({
   // http://localhost:3000/account-update/cus_Mozc8lzOsERSRI
 
   const handleChange = (e) => {
+    if (e.target.name === "email") {
+      if (e.target.value === email) {
+        console.log(e.target.value);
+        setEmailChanged(false);
+      } else {
+        setEmailChanged(true);
+      }
+    }
     setNameemail({ ...nameemail, [e.target.name]: e.target.value });
   };
+
   const handleSubmit = async (event) => {
     // We don't want to let default form submission happen here,
     // which would refresh the page.
@@ -63,14 +72,19 @@ const UpdateCustomer = ({
       return;
     }
     try {
-      console.log("nameemail", nameemail);
-
+      console.log("nameemail", nameemail, "emailchanged", emailChanged);
+      const { token, error } = await stripe.createToken(card);
+      if (error) {
+        throw error;
+      }
       const { data } = await axios.post(
         `http://localhost:4242/account-update/${customer_id}`,
         {
-          name: nameemail.name,
-          email: nameemail.email,
+          name: nameemail.name === "" ? name : nameemail.name,
+          email: nameemail.email === "" ? email : nameemail.email,
           payment_method,
+          token,
+          emailChanged,
         }
       );
 
@@ -96,6 +110,7 @@ const UpdateCustomer = ({
               setActive(true);
               setProcessing(false);
               setReload((prevState) => !prevState);
+              setEmailChanged(false);
             }
           }
         });
@@ -139,7 +154,10 @@ const UpdateCustomer = ({
 
   return (
     <div className="lesson-form">
-      <form onSubmit={handleSubmit} className="lesson-desc">
+      <form
+        className={`lesson-desc ${active && "hidden"}`}
+        onSubmit={handleSubmit}
+      >
         <h3>Update your Payment details</h3>
         <div className="lesson-info">
           Fill out the form below if you'd like to us to use a new card.
@@ -191,33 +209,26 @@ const UpdateCustomer = ({
             Customer email already exists
           </div>
         </div>
-        {!error && (
-          <button
-            id="submit"
-            type="submit"
-            disabled={
-              loading ||
-              disabled ||
-              processing ||
-              !nameemail?.name ||
-              !nameemail?.email
-            }
-          >
-            <div
-              className={`spinner ${!processing ? "hidden" : ""}`}
-              id="spinner"
-            ></div>
-            <span className={`${processing ? "hidden" : ""}`} id="button-text">
-              Save
-            </span>
-          </button>
-        )}
+        <button
+          id="submit"
+          type="submit"
+          disabled={loading || disabled || processing || error}
+        >
+          <div
+            className={`spinner ${!processing ? "hidden" : ""}`}
+            id="spinner"
+          ></div>
+          <span className={`${processing ? "hidden" : ""}`} id="button-text">
+            Save
+          </span>
+        </button>
+
         <div className="lesson-legal-info">
           Your new card will be charged when you book your next session.
         </div>
       </form>
 
-      <div className="sr-section hidden completed-view">
+      <div className={`sr-section completed-view ${!active && "hidden"}`}>
         <h3 id="signup-status">Payment Information updated </h3>
         <Link to="/lessons">
           <button>Sign up for lessons under a different email address</button>

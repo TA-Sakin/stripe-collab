@@ -1,0 +1,62 @@
+ Account Update Page
+    1) Should Load and Display the Account Details:5.1.1
+    2) Should allow Customer to Update Card Data without filling Name and EmailId:5.1.3
+    3) Should not allow usage of existing Customer Email ID while Updating Account Info:5.1.4
+    ✓ Should attach new Payment Method and Delete old one after Card Update:5.1.5
+    ✓ Should show Error Message if Invalid Card is used while Updating Account Info:5.1.6 (19373ms)
+    ✓ Should show Error Message if Invalid 3DS Card is used while Updating Account Info:5.1.7 (35245ms)
+    4) Should allow Customer to Successfully Update Payment after Card Decline:5.1.8
+
+  Customer Deletion Route
+    5) "before all" hook for "Should not Delete Customers with Uncaptured Payments:5.2.2"
+
+
+  3 passing (2m)
+  5 failing
+
+  1) Account Update Page
+       Should Load and Display the Account Details:5.1.1:
+
+      Timed out retrying after 4000ms
+      + expected - actual
+
+      -'Billing Email: Leda.Marvin14@gmail.com'
+      +'Leda.Marvin14@gmail.com'
+      
+      at Object.validateAccountUpdatePage (http://localhost:3000/__cypress/tests?p=cypress/integration/lessons_account_management.js:578:49)
+      at Context.eval (http://localhost:3000/__cypress/tests?p=cypress/integration/lessons_account_management.js:137:11)
+
+  2) Account Update Page
+       Should allow Customer to Update Card Data without filling Name and EmailId:5.1.3:
+
+      Timed out retrying after 4000ms
+      + expected - actual
+
+      -'Card last 4: 4444'
+      +'4444'
+      
+      at Object.confirmCardUpdate (http://localhost:3000/__cypress/tests?p=cypress/integration/lessons_account_management.js:419:46)
+      at Context.eval (http://localhost:3000/__cypress/tests?p=cypress/integration/lessons_account_management.js:166:11)
+
+  3) Account Update Page
+       Should not allow usage of existing Customer Email ID while Updating Account Info:5.1.4:
+     AssertionError: Timed out retrying after 4000ms: expected '<button#submit>' to be 'enabled'
+      at submitAcctInfo (http://localhost:3000/__cypress/tests?p=cypress/integration/lessons_account_management.js:358:21)
+      at Object.checkDuplicateEmail (http://localhost:3000/__cypress/tests?p=cypress/integration/lessons_account_management.js:590:3)
+      at Context.eval (http://localhost:3000/__cypress/tests?p=cypress/integration/lessons_account_management.js:179:11)
+
+  4) Account Update Page
+       Should allow Customer to Successfully Update Payment after Card Decline:5.1.8:
+
+      Timed out retrying after 4000ms
+      + expected - actual
+
+      -'Card last 4: 4444'
+      +'4444'
+      
+      at Object.confirmCardUpdate (http://localhost:3000/__cypress/tests?p=cypress/integration/lessons_account_management.js:419:46)
+      at Context.eval (http://localhost:3000/__cypress/tests?p=cypress/integration/lessons_account_management.js:260:11)
+
+  5) Customer Deletion Route
+       "before all" hook for "Should not Delete Customers with Uncaptured Payments:5.2.2":
+     CypressError: `cy.request()` failed on:

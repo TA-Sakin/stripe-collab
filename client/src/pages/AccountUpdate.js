@@ -33,20 +33,16 @@ const AccountUpdate = ({ id }) => {
         <h4>Current Account information</h4>
         <h5>We have the following card information on file for you: </h5>
         <p>
-          Billing Email: {data.email}
-          <span id="billing-email"></span>
+          <span id="billing-email">Billing Email: {data.email}</span>
         </p>
         <p>
-          Card Exp Month: {data.exp_month}
-          <span id="card-exp-month"></span>
+          <span id="card-exp-month"> Card Exp Month: {data.exp_month}</span>
         </p>
         <p>
-          Card Exp Year: {data.exp_year}
-          <span id="card-exp-year"></span>
+          <span id="card-exp-year">Card Exp Year: {data.exp_year}</span>
         </p>
         <p>
-          Card last 4: {data.last4}
-          <span id="card-last4"></span>
+          <span id="card-last4">Card last 4: {data.last4}</span>
         </p>
       </div>
       <UpdateCustomer
