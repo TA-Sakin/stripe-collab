@@ -3,6 +3,89 @@ import { Link } from "@reach/router";
 import { CardElement } from "@stripe/react-stripe-js";
 
 const UpdateCustomer = () => {
+  const handleSubmit = async (event) => {
+    // We don't want to let default form submission happen here,
+    // which would refresh the page.
+    event.preventDefault();
+    setCardError("");
+    setProcessing(true);
+    const card = elements?.getElement(CardElement);
+    const name = event.target.name.value;
+    const email = event.target.email.value;
+    // console.log(name, email);
+    if (!stripe || !elements) {
+      // Stripe.js has not yet loaded.
+      // Make sure to disable form submission until Stripe.js has loaded.
+      return;
+    }
+
+    if (card === null) {
+      return;
+    }
+    try {
+      const { token, error } = await stripe.createToken(card);
+      if (error) {
+        throw error;
+      }
+      // console.log(token);
+
+      const { data } = await axios.post("http://localhost:4242/lessons", {
+        name,
+        email,
+        token: token.id,
+        first_lesson: sessions[selected].title,
+      });
+
+      setUserInfo({
+        name,
+        email,
+        last4: token.card.last4,
+        customer_id: data.customer_id,
+      });
+
+      stripe
+        .confirmCardSetup(data.clientSecret, {
+          payment_method: {
+            card,
+            billing_details: {
+              name,
+              email,
+            },
+          },
+        })
+        .then(function (result) {
+          if (result.error) {
+            // setActive(false);
+            setProcessing(false);
+            setCardError(result.error.message);
+            console.log(card);
+          } else {
+            if (result.setupIntent.status === "succeeded") {
+              setActive(true);
+              setProcessing(false);
+            }
+          }
+        });
+    } catch (error) {
+      setProcessing(false);
+
+      if (error.response?.status === 403) {
+        setUserInfo({
+          ...userInfo,
+          customer_id: error.response.data?.customer_id,
+        });
+        setError(true);
+      } else if (
+        error.response?.data.error.message == "Your card was declined."
+      ) {
+        setCardError("Your card has been declined.");
+      } else if (error.message) {
+        setCardError(error.message);
+      } else {
+        setCardError(error);
+      }
+    }
+  };
   const CARD_ELEMENT_OPTIONS = {
     style: {
       base: {
@@ -22,7 +105,7 @@ const UpdateCustomer = () => {
   };
   return (
     <div className="lesson-form">
-      <div className="lesson-desc">
+      <form onSubmit={handleSubmit} className="lesson-desc">
         <h3>Update your Payment details</h3>
         <div className="lesson-info">
           Fill out the form below if you'd like to us to use a new card.
@@ -48,7 +131,11 @@ const UpdateCustomer = () => {
             </div>
             <div className="lesson-input-box">
               <div className="lesson-card-element">
-                <CardElement options={CARD_ELEMENT_OPTIONS} />
+                <CardElement
+                  onChange={handleCard}
+                  onReady={handleReady}
+                  options={CARD_ELEMENT_OPTIONS}
+                />
               </div>
             </div>
           </div>
@@ -67,7 +154,7 @@ const UpdateCustomer = () => {
         <div className="lesson-legal-info">
           Your new card will be charged when you book your next session.
         </div>
-      </div>
+      </form>
 
       <div className="sr-section hidden completed-view">
         <h3 id="signup-status">Payment Information updated </h3>

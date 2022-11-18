@@ -135,11 +135,12 @@ app.post("/lessons", async (req, res) => {
       email: email,
       limit: 1,
     });
+    // console.log("customers list", customers);
 
-    if (customers.data.length > 0) {
-      return res.status(400).json({
+    if (customers.data.length > 0 && customers.data[0].default_source) {
+      return res.status(403).json({
         message: "Email already exist",
-        customerId: customers.data[0].id,
+        customer_id: customers.data[0].id,
       });
     }
 
@@ -148,22 +149,21 @@ app.post("/lessons", async (req, res) => {
       email: email,
       metadata: { first_lesson: first_lesson },
     });
-
-    const card = await stripe.customers.createSource(customer.id, {
-      source: token,
-    });
+    // console.log("create customer", customer);
 
     const setupIntent = await stripe.setupIntents.create({
       customer: customer.id,
       payment_method_types: ["card"],
     });
-    // const paymentMethod = await stripe.paymentMethods.retrieve();
-    // console.log(setupIntent.client_secret);
-    // console.log("Customer ID from Steup Intent: " + setupIntent.customer);
+
+    await stripe.customers.createSource(customer.id, {
+      source: token,
+    });
+    // console.log("card", card);
+
     res.send({
       clientSecret: setupIntent.client_secret,
-      last4: card.last4,
-      customer_id: card.customer,
+      customer_id: setupIntent.customer,
     });
   } catch (e) {
     return res.status(400).send({
@@ -218,26 +218,20 @@ app.post("/lessons", async (req, res) => {
 //         found for that customer return an msg 'no payment methods found for <customer_id>'
 //    payment_intent_id: if a payment intent was created but not successfully authorized
 // }
+
 app.post("/schedule-lesson", async (req, res) => {
   const data = req.body;
   const { customer_id, amount, description } = data;
   try {
-    // const charge = await stripe.charges.create({
-    //   amount: amount,
-    //   currency: "usd",
-    //   description: description,
-    //   // source: token,
-    //   customer: customer_id,
-    //   capture: false,
-    // });
-    // if (charge) console.log(charge);
-    // res.json(charge);
-    const paymentMethods = await stripe.paymentMethods.list({
-      customer: customer_id,
-      type: "card",
-    });
+    const paymentMethods = await stripe.customers.listPaymentMethods(
+      customer_id,
+      { type: "card" }
+    );
+    // declind card: cus_MocwKDbXRZbSn0
+    // valid cus: cus_MogNhLXiZmKqY9
     if (paymentMethods.data.length < 1) {
-      return res.json({
+      console.log("paymentMethods", paymentMethods);
+      return res.status(404).json({
         error: {
           message: "no payment methods found for " + customer_id,
         },
@@ -248,20 +242,24 @@ app.post("/schedule-lesson", async (req, res) => {
       amount: amount,
       currency: "inr",
       customer: customer_id,
-      payment_method: paymentMethods.data[0].id,
-      off_session: true,
+      // payment_method: paymentMethods.data[0].id,
+      // off_session: true,
       confirm: true,
+      // payment_method_types: ["card"],
+      // capture_method: "manual",
+      description,
+      metadata: { type: "lessons-payment" },
     });
 
-    // console.log(paymentIntent);
-    res.json({ payment: paymentIntent });
+    console.log("paymentIntent", paymentIntent);
+    res.status(200).send({ payment: paymentIntent });
   } catch (error) {
     console.log(error);
-    res.json({
+    res.status(400).send({
       error: {
         code: error.code,
-        message: error.raw.message,
-        payment_intent_id: error.payment_intent,
+        message: error.raw?.message,
+        payment_intent_id: error.payment_intent?.id,
       },
     });
   }
@@ -296,17 +294,22 @@ app.post("/complete-lesson-payment", async (req, res) => {
   const data = req.body;
   const { payment_intent_id, amount } = data;
   try {
-    console.log("data", data);
-    const intent = await stripe.paymentIntents.capture(payment_intent_id, {
-      amount_to_capture: amount,
-    });
-    res.json({ payment: intent });
+    const paymentIntent = await stripe.paymentIntents.capture(
+      payment_intent_id,
+      { amount }
+    );
+    // const paymentIntent = await stripe.paymentIntents.confirm(
+    //   payment_intent_id,
+    //   { payment_method: "pm_card_visa" }
+    // );
+    console.log("data", paymentIntent);
+    res.status(200).send({ payment: paymentIntent });
   } catch (error) {
     console.log(error);
-    res.json({
+    res.status(400).send({
       error: {
         code: error.code,
-        message: error.raw.message,
+        message: error.raw?.message,
       },
     });
   }
@@ -340,11 +343,52 @@ app.post("/complete-lesson-payment", async (req, res) => {
 //        message: e.error.message
 //      }
 //  }
-app.post("/refund-lesson", async (req, res) => {});
+app.post("/refund-lesson", async (req, res) => {
+  try {
+    const { payment_intent_id, amount } = req.body;
+    const refund = await stripe.refunds.create({
+      payment_intent: payment_intent_id,
+      amount: amount,
+    });
+    // console.log(refund);
+    res.status(200).send({
+      refund: refund.id,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(400).send({
+      error: {
+        code: error.code,
+        message: error.raw?.message,
+      },
+    });
+  }
+});
 
 // Milestone 3: Managing account info
 // Displays the account update page for a given customer
-app.get("/account-update/:customer_id", async (req, res) => {});
+app.get("/account-update/:customer_id", async (req, res) => {
+  try {
+    const { customer_id } = req.params;
+    // const customer = await stripe.customers.retrieve(customer_id);
+    const paymentMethods = await stripe.customers.listPaymentMethods(
+      customer_id,
+      { type: "card" }
+    );
+    const { billing_details, card } = paymentMethods.data[0];
+    res.status(200).send({
+      email: billing_details.email,
+      exp_month: card.exp_month,
+      exp_year: card.exp_year,
+      last4: card.last4,
+    });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(400)
+      .send({ error: { code: error.code, message: error.raw?.message } });
+  }
+});
 
 // Milestone 3: '/delete-account'
 // Deletes a customer object if there are no uncaptured payment intents for them.

@@ -12,14 +12,15 @@ const AccountUpdate = ({ id }) => {
 
   useEffect(() => {
     const setup = async () => {
-      const result = accountUpdate(id);
+      const result = await accountUpdate(id);
       if (result !== null) {
         setData(result);
       }
     };
     setup();
   }, [id]);
-
+  console.log("data", data);
+  // if (!data?.email) return;
   return (
     <main className="main-lessons">
       <Header />
@@ -31,16 +32,20 @@ const AccountUpdate = ({ id }) => {
         <h4>Current Account information</h4>
         <h5>We have the following card information on file for you: </h5>
         <p>
-          Billing Email:&nbsp;&nbsp;<span id="billing-email"></span>
+          Billing Email: {data.email}
+          <span id="billing-email"></span>
         </p>
         <p>
-          Card Exp Month:&nbsp;&nbsp;<span id="card-exp-month"></span>
+          Card Exp Month: {data.exp_month}
+          <span id="card-exp-month"></span>
         </p>
         <p>
-          Card Exp Year:&nbsp;&nbsp;<span id="card-exp-year"></span>
+          Card Exp Year: {data.exp_year}
+          <span id="card-exp-year"></span>
         </p>
         <p>
-          Card last 4:&nbsp;&nbsp;<span id="card-last4"></span>
+          Card last 4: {data.last4}
+          <span id="card-last4"></span>
         </p>
       </div>
       <UpdateCustomer />

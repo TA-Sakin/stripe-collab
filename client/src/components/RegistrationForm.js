@@ -18,7 +18,7 @@ const RegistrationForm = ({ selected, details, sessions }) => {
   const [cardError, setCardError] = useState("");
   const [nameemail, setNameemail] = useState({});
   const handleCard = (e) => {
-    // console.log("handlecard", e);
+    console.log("handlecard", e);
     if (e.complete) {
       setLoading(false);
     } else {
@@ -61,6 +61,7 @@ const RegistrationForm = ({ selected, details, sessions }) => {
       if (error) {
         throw error;
       }
+      // console.log(token);
 
       const { data } = await axios.post("http://localhost:4242/lessons", {
         name,
@@ -68,11 +69,11 @@ const RegistrationForm = ({ selected, details, sessions }) => {
         token: token.id,
         first_lesson: sessions[selected].title,
       });
-
+      // fetch(url).then(res=>res.json()).then(data=>{data.clientSecret,data.customer_id})
       setUserInfo({
         name,
         email,
-        last4: data.last4,
+        last4: token.card.last4,
         customer_id: data.customer_id,
       });
 
@@ -90,8 +91,8 @@ const RegistrationForm = ({ selected, details, sessions }) => {
           if (result.error) {
             // setActive(false);
             setProcessing(false);
-            console.log("card error", result.error);
-            setCardError(result.error?.message);
+            setCardError(result.error.message);
+            console.log(card);
           } else {
             if (result.setupIntent.status === "succeeded") {
               setActive(true);
@@ -101,16 +102,21 @@ const RegistrationForm = ({ selected, details, sessions }) => {
         });
     } catch (error) {
       setProcessing(false);
-      console.log("inside catch error", error);
 
-      if (error.response.data.message === "Email already exist") {
+      if (error.response?.status === 403) {
         setUserInfo({
           ...userInfo,
-          customer_id: error.response.data.customerId,
+          customer_id: error.response.data?.customer_id,
         });
         setError(true);
-      } else {
+      } else if (
+        error.response?.data.error.message == "Your card was declined."
+      ) {
+        setCardError("Your card has been declined.");
+      } else if (error.message) {
         setCardError(error.message);
+      } else {
+        setCardError(error);
       }
     }
   };
