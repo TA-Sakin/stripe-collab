@@ -18,13 +18,12 @@ const UpdateCustomer = ({
   const elements = useElements();
   const [active, setActive] = useState(false);
   const [userInfo, setUserInfo] = useState({});
-  const [error, setError] = useState(false);
+  const [emailError, setEmailError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [disabled, setDisabled] = useState(true);
   const [cardError, setCardError] = useState("");
   const [nameemail, setNameemail] = useState(defaultInfo);
-  const [emailChanged, setEmailChanged] = useState(false);
   useEffect(() => {
     setNameemail({ ...nameemail, name, email });
   }, [name, email]);
@@ -44,12 +43,7 @@ const UpdateCustomer = ({
 
   const handleChange = (e) => {
     if (e.target.name === "email") {
-      if (e.target.value === email) {
-        console.log(e.target.value);
-        setEmailChanged(false);
-      } else {
-        setEmailChanged(true);
-      }
+      setEmailError(false);
     }
     setNameemail({ ...nameemail, [e.target.name]: e.target.value });
   };
@@ -72,7 +66,6 @@ const UpdateCustomer = ({
       return;
     }
     try {
-      console.log("nameemail", nameemail, "emailchanged", emailChanged);
       const { token, error } = await stripe.createToken(card);
       if (error) {
         throw error;
@@ -84,7 +77,6 @@ const UpdateCustomer = ({
           email: nameemail.email === "" ? email : nameemail.email,
           payment_method,
           token,
-          emailChanged,
         }
       );
 
@@ -104,13 +96,11 @@ const UpdateCustomer = ({
             console.log(result.error);
             setProcessing(false);
             setCardError(result.error.message);
-            console.log(card);
           } else {
             if (result.setupIntent.status === "succeeded") {
               setActive(true);
               setProcessing(false);
               setReload((prevState) => !prevState);
-              setEmailChanged(false);
             }
           }
         });
@@ -122,7 +112,7 @@ const UpdateCustomer = ({
           ...userInfo,
           customer_id: error.response.data?.customer_id,
         });
-        setError(true);
+        setEmailError(true);
       } else if (
         error.response?.data.error?.message == "Your card was declined."
       ) {
@@ -204,7 +194,7 @@ const UpdateCustomer = ({
             className="sr-field-error"
             id="customer-exists-error"
             role="alert"
-            hidden={!error}
+            hidden={!emailError}
           >
             Customer email already exists
           </div>
@@ -212,7 +202,7 @@ const UpdateCustomer = ({
         <button
           id="submit"
           type="submit"
-          disabled={loading || disabled || processing || error}
+          disabled={loading || disabled || processing}
         >
           <div
             className={`spinner ${!processing ? "hidden" : ""}`}
