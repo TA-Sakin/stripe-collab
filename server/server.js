@@ -382,15 +382,21 @@ app.post("/account-update/:customer_id", async (req, res) => {
     const { customer_id } = req.params;
     const data = req.body;
     const { name, email, payment_method, token } = data;
+
     const customers = await stripe.customers.list({
       email: email,
-      limit: 1,
+      limit: 100,
     });
 
     if (customers.data.length > 0 && customers.data[0].id !== customer_id) {
       return res.status(403).json({
         message: "Customer email already exists",
       });
+      // for (const customer of customers.data) {
+      //   if (customer.id !== customer_id) {
+      //     console.log("customers", customers);
+      //   }
+      // }
     }
 
     const customer = await stripe.customers.update(customer_id, {
@@ -398,10 +404,13 @@ app.post("/account-update/:customer_id", async (req, res) => {
       email,
     });
 
+    if (!token && customer) {
+      return res.status(200).send(customer);
+    }
+
     const paymentMethod = await stripe.paymentMethods.update(payment_method, {
       billing_details: { name, email },
     });
-    console.log("paymentMethod", paymentMethod);
 
     const setupIntent = await stripe.setupIntents.create({
       customer: customer.id,
@@ -414,7 +423,7 @@ app.post("/account-update/:customer_id", async (req, res) => {
     // const result = {customer}
     res.status(200).send({ clientSecret: setupIntent.client_secret });
   } catch (error) {
-    console.log(error);
+    console.log("error", error);
     return res
       .status(400)
       .send({ error: { code: error.code, message: error.raw?.message } });
@@ -505,11 +514,101 @@ app.post("/delete-account/:customer_id", async (req, res) => {
 //      fee_total: total amount in fees that the store has paid to Stripe
 //      net_total: net amount the store has earned from the payments.
 // }
+
 //
+
+app.post(
+  "/webhook",
+  express.raw({ type: "application/json" }),
+  (request, response) => {
+    const sig = request.headers["stripe-signature"];
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        request.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+      console.log("event", event);
+    } catch (err) {
+      response.status(400).send(`Webhook Error: ${err.message}`);
+      return;
+    }
+
+    // Handle the event
+    console.log(`Unhandled event type ${event.type}`);
+
+    // Return a 200 response to acknowledge receipt of the event
+    response.send();
+  }
+);
+
 app.get("/calculate-lesson-total", async (req, res) => {
   try {
-    const charges = await stripe.charges.list({
-      limit: 10,
+    // const paymentIntents = await stripe.paymentIntents.list({
+    //   limit: 100,
+    // });
+    // https://stripe.com/docs/reports/api
+    let payment_total = 0,
+      net_total = 0,
+      fee_total = 0;
+    refund = 0;
+
+    // const charges = await stripe.charges.list({
+    //   limit: 100,
+    // });
+
+    // charges.data.forEach((charge) => {
+    //   if (charge.amount_captured > 0) {
+    //     payment_total += charge.amount;
+    //   }
+    //   refund += charge.amount_refunded;
+    //   fee_total += charge.application_fee_amount + charge.amount_refunded;
+    // });
+    // net_total = payment_total - fee_total;
+
+    const startDay = new Date();
+    startDay.setUTCHours(0, 0, 0, 0);
+    let startDayInUTC = new Date(
+      startDay.getUTCFullYear(),
+      startDay.getUTCMonth(),
+      startDay.getUTCDate(),
+      startDay.getUTCHours(),
+      startDay.getUTCMinutes(),
+      startDay.getUTCSeconds()
+    );
+    const interval_end = Math.floor(startDayInUTC.getTime() / 1000);
+    const interval_start = interval_end - 86400 * 2;
+
+    console.log("interval_end", interval_end, "start", interval_start);
+
+    const reportRun = await stripe.reporting.reportRuns.create({
+      report_type: "balance.summary.1",
+      parameters: {
+        // currency: "usd",
+        interval_start,
+        interval_end,
+      },
+    });
+
+    // const webhookEndpoint = await stripe.webhookEndpoints.create({
+    //   url: "http://localhost:4242/webhook",
+    //   enabled_events: ["reporting.report_run.succeeded"],
+    // });
+
+    const report = await stripe.reporting.reportRuns.retrieve(
+      "frr_1M7IG6BVhoJP270LbId4rxLw"
+    );
+    // reportRun.id
+
+    res.status(200).send({
+      // payment_total,
+      // fee_total,
+      // net_total,
+      // refund,
+      // reportRun,
+      report,
+      // webhookEndpoint,
     });
   } catch (error) {
     console.log(error);

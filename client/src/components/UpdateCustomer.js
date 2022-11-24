@@ -19,20 +19,30 @@ const UpdateCustomer = ({
   const [active, setActive] = useState(false);
   const [userInfo, setUserInfo] = useState({});
   const [emailError, setEmailError] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [disabled, setDisabled] = useState(true);
   const [cardError, setCardError] = useState("");
   const [nameemail, setNameemail] = useState(defaultInfo);
+  const [cardInserted, setCardInserted] = useState(false);
+  const [emailChanged, setEmailChanged] = useState(false);
   useEffect(() => {
     setNameemail({ ...nameemail, name, email });
   }, [name, email]);
 
   const handleCard = (e) => {
+    console.log("handle card", e);
+    if (!e.complete) {
+      setLoading(true);
+    }
+    if (e.empty) {
+      setLoading(false);
+    }
+    // if (e.empty && !e.complete) {
+    // }
     if (e.complete) {
       setLoading(false);
-    } else {
-      setLoading(true);
+      setCardInserted(true);
     }
   };
 
@@ -44,6 +54,7 @@ const UpdateCustomer = ({
   const handleChange = (e) => {
     if (e.target.name === "email") {
       setEmailError(false);
+      setEmailChanged(true);
     }
     setNameemail({ ...nameemail, [e.target.name]: e.target.value });
   };
@@ -53,9 +64,13 @@ const UpdateCustomer = ({
     // which would refresh the page.
     event.preventDefault();
     setCardError("");
+    if (emailChanged) {
+      if (nameemail.email === email) {
+        return setEmailError(true);
+      }
+    }
     setProcessing(true);
     const card = elements?.getElement(CardElement);
-
     if (!stripe || !elements) {
       // Stripe.js has not yet loaded.
       // Make sure to disable form submission until Stripe.js has loaded.
@@ -65,56 +80,77 @@ const UpdateCustomer = ({
     if (card === null) {
       return;
     }
-    try {
-      const { token, error } = await stripe.createToken(card);
-      if (error) {
-        throw error;
-      }
-      const { data } = await axios.post(
-        `http://localhost:4242/account-update/${customer_id}`,
-        {
-          name: nameemail.name === "" ? name : nameemail.name,
-          email: nameemail.email === "" ? email : nameemail.email,
-          payment_method,
-          token,
-        }
-      );
 
-      stripe
-        .confirmCardSetup(data.clientSecret, {
-          payment_method: {
-            card,
-            billing_details: {
-              name,
-              email,
-            },
-          },
-        })
-        .then(function (result) {
-          if (result.error) {
-            // setActive(false);
-            console.log(result.error);
-            setProcessing(false);
-            setCardError(result.error.message);
-          } else {
-            if (result.setupIntent.status === "succeeded") {
-              setActive(true);
-              setProcessing(false);
-              setReload((prevState) => !prevState);
-            }
+    try {
+      if (!cardInserted) {
+        console.log("card not inserted", cardInserted);
+        const { data } = await axios.post(
+          `http://localhost:4242/account-update/${customer_id}`,
+          {
+            name: nameemail.name === "" ? name : nameemail.name,
+            email: nameemail.email === "" ? email : nameemail.email,
           }
-        });
+        );
+        if (data) {
+          setActive(true);
+          setProcessing(false);
+          setReload((prevState) => !prevState);
+        }
+      } else {
+        console.log("card inserted", cardInserted);
+        const { token, error } = await stripe.createToken(card);
+        if (error) {
+          console.log("token", error, card);
+          throw error;
+        }
+
+        const { data } = await axios.post(
+          `http://localhost:4242/account-update/${customer_id}`,
+          {
+            name: nameemail.name === "" ? name : nameemail.name,
+            email: nameemail.email === "" ? email : nameemail.email,
+            payment_method,
+            token,
+          }
+        );
+
+        stripe
+          .confirmCardSetup(data.clientSecret, {
+            payment_method: {
+              card,
+              billing_details: {
+                name,
+                email,
+              },
+            },
+          })
+          .then(function (result) {
+            if (result.error) {
+              // setActive(false);
+              console.log(result.error);
+              setProcessing(false);
+              setCardError(result.error.message);
+            } else {
+              if (result.setupIntent.status === "succeeded") {
+                setActive(true);
+                setProcessing(false);
+                setReload((prevState) => !prevState);
+                setNameemail(defaultInfo);
+              }
+            }
+          });
+      }
     } catch (error) {
       setProcessing(false);
-      console.log(error);
-      if (error.response?.status === 403) {
-        setUserInfo({
-          ...userInfo,
-          customer_id: error.response.data?.customer_id,
-        });
+      if (
+        // error.response?.status === 403 ||
+        error.response?.data?.message === "Customer email already exists"
+      ) {
+        console.log(error);
         setEmailError(true);
+        // setNameemail({ ...nameemail, email: "" });
       } else if (
-        error.response?.data.error?.message == "Your card was declined."
+        error.response?.data?.error?.message == "Your card was declined."
       ) {
         setCardError("Your card has been declined.");
       } else if (error.message) {
@@ -187,9 +223,11 @@ const UpdateCustomer = ({
               </div>
             </div>
           </div>
-          <div className="sr-field-error" id="card-errors" role="alert">
-            {cardError}
-          </div>
+          {cardError && (
+            <div className="sr-field-error" id="card-errors" role="alert">
+              {cardError}
+            </div>
+          )}
           <div
             className="sr-field-error"
             id="customer-exists-error"
