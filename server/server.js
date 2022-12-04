@@ -385,18 +385,12 @@ app.post("/account-update/:customer_id", async (req, res) => {
 
     const customers = await stripe.customers.list({
       email: email,
-      limit: 100,
+      limit: 1,
     });
-
     if (customers.data.length > 0 && customers.data[0].id !== customer_id) {
-      return res.status(403).json({
-        message: "Customer email already exists",
+      return res.status(403).send({
+        error: "Customer email already exists",
       });
-      // for (const customer of customers.data) {
-      //   if (customer.id !== customer_id) {
-      //     console.log("customers", customers);
-      //   }
-      // }
     }
 
     const customer = await stripe.customers.update(customer_id, {
@@ -465,7 +459,6 @@ app.post("/delete-account/:customer_id", async (req, res) => {
       customer: customer_id,
       limit: 5,
     });
-    // console.log("paymentIntents", paymentIntents);
 
     const payment_intent_ids = [];
     var isPaymentCaptured = false;
@@ -479,11 +472,9 @@ app.post("/delete-account/:customer_id", async (req, res) => {
       }
     });
 
-    // console.log("payment_intent_ids", payment_intent_ids);
-
     if (payment_intent_ids.length < 1 || isPaymentCaptured) {
       const deleted = await stripe.customers.del(customer_id);
-      // console.log({ deleted });
+
       res.status(200).send({
         deleted: deleted.deleted,
         uncaptured_payments: payment_intent_ids,
