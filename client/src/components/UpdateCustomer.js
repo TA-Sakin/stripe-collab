@@ -144,19 +144,20 @@ const UpdateCustomer = ({
       setProcessing(false);
       if (
         // error.response?.status === 403 ||
-        error.response?.data?.message === "Customer email already exists"
+        error.response?.data?.error === "Customer email already exists"
       ) {
-        console.log(error);
         setEmailError(true);
-        // setNameemail({ ...nameemail, email: "" });
       } else if (
         error.response?.data?.error?.message == "Your card was declined."
       ) {
         setCardError("Your card has been declined.");
+        setEmailError(false);
       } else if (error.message) {
         setCardError(error.message);
+        setEmailError(true);
       } else {
         setCardError(error);
+        setEmailError(true);
       }
     }
   };

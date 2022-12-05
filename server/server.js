@@ -494,117 +494,140 @@ app.post("/delete-account/:customer_id", async (req, res) => {
 // Milestone 4: '/calculate-lesson-total'
 // Returns the total amounts for payments for lessons, ignoring payments
 // for videos and concert tickets.
-//
+
 // Example call: curl -X GET http://localhost:4242/calculate-lesson-total
-//
+
 // Returns a JSON response of the format:
 // {
-//      payment_total: total before fees and refunds (including disputes), and excluding payments
-//         that haven't yet been captured.
-//         This should be equivalent to net + fee totals.
+//  payment_total: total before fees and refunds (including disputes), and excluding payments
+//     that haven't yet been captured.
+//     This should be equivalent to net + fee totals.
 //      fee_total: total amount in fees that the store has paid to Stripe
 //      net_total: net amount the store has earned from the payments.
 // }
 
-//
+// ----------
 
-app.post(
-  "/webhook",
-  express.raw({ type: "application/json" }),
-  (request, response) => {
-    const sig = request.headers["stripe-signature"];
-    let event;
-    try {
-      event = stripe.webhooks.constructEvent(
-        request.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-      console.log("event", event);
-    } catch (err) {
-      response.status(400).send(`Webhook Error: ${err.message}`);
-      return;
-    }
+// app.post(
+//   "/webhook",
+//   express.raw({ type: "application/json" }),
+//   (request, response) => {
+//     const sig = request.headers["stripe-signature"];
+//     let event;
+//     try {
+//       event = stripe.webhooks.constructEvent(
+//         request.body,
+//         sig,
+//         process.env.STRIPE_WEBHOOK_SECRET
+//       );
+//       console.log("event", event);
+//     } catch (err) {
+//       response.status(400).send(`Webhook Error: ${err.message}`);
+//       return;
+//     }
 
-    // Handle the event
-    console.log(`Unhandled event type ${event.type}`);
+//     // Handle the event
+//     console.log(`Unhandled event type ${event.type}`);
 
-    // Return a 200 response to acknowledge receipt of the event
-    response.send();
-  }
-);
+//     // Return a 200 response to acknowledge receipt of the event
+//     response.send();
+//   }
+// );
 
 app.get("/calculate-lesson-total", async (req, res) => {
   try {
-    // const paymentIntents = await stripe.paymentIntents.list({
-    //   limit: 100,
-    // });
-    // https://stripe.com/docs/reports/api
+    const today = new Date();
+    //today.setUTCHours(); //today's start time
+    let todayInUTC = new Date(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate(),
+      today.getUTCHours(),
+      today.getUTCMinutes(),
+      today.getUTCSeconds()
+    );
+
+    //today's start time in utc
+    const interval_end = Math.floor(todayInUTC.getTime() / 1000);
+
+    const numOfDays = 86400 * 7; //number of days in sec
+
+    // start of the last week in utc
+    const interval_start = interval_end - numOfDays;
+    // console.log(
+    //   "interval_end",
+    //   interval_end,
+    //   "interval_start",
+    //   interval_start,
+    //   startDayInUTC
+    // );
     let payment_total = 0,
       net_total = 0,
       fee_total = 0;
     refund = 0;
+    let charges = {};
 
-    // const charges = await stripe.charges.list({
-    //   limit: 100,
+    const checkHasMore = async () => {
+      charges = await stripe.charges.list({
+        limit: 100,
+        created: {
+          gte: interval_start,
+        },
+      });
+
+      charges.data.forEach((charge) => {
+        if (charge.captured) {
+          payment_total +=
+            charge.amount -
+            (charge.application_fee_amount +
+              charge.amount_refunded +
+              charge.dispute);
+        }
+        fee_total += charge.application_fee_amount;
+      });
+
+      net_total = payment_total - fee_total;
+
+      if (charges.has_more) {
+        checkHasMore();
+      }
+    };
+    await checkHasMore();
+
+    // console.log("interval_end", interval_end, "start", interval_start);
+
+    // const reportRun = await stripe.reporting.reportRuns.create({
+    //   report_type: "balance.summary.1",
+    //   parameters: {
+    //     // currency: "usd",
+    //     interval_start,
+    //     interval_end,
+    //   },
     // });
-
-    // charges.data.forEach((charge) => {
-    //   if (charge.amount_captured > 0) {
-    //     payment_total += charge.amount;
-    //   }
-    //   refund += charge.amount_refunded;
-    //   fee_total += charge.application_fee_amount + charge.amount_refunded;
-    // });
-    // net_total = payment_total - fee_total;
-
-    const startDay = new Date();
-    startDay.setUTCHours(0, 0, 0, 0);
-    let startDayInUTC = new Date(
-      startDay.getUTCFullYear(),
-      startDay.getUTCMonth(),
-      startDay.getUTCDate(),
-      startDay.getUTCHours(),
-      startDay.getUTCMinutes(),
-      startDay.getUTCSeconds()
-    );
-    const interval_end = Math.floor(startDayInUTC.getTime() / 1000);
-    const interval_start = interval_end - 86400 * 2;
-
-    console.log("interval_end", interval_end, "start", interval_start);
-
-    const reportRun = await stripe.reporting.reportRuns.create({
-      report_type: "balance.summary.1",
-      parameters: {
-        // currency: "usd",
-        interval_start,
-        interval_end,
-      },
-    });
 
     // const webhookEndpoint = await stripe.webhookEndpoints.create({
     //   url: "http://localhost:4242/webhook",
     //   enabled_events: ["reporting.report_run.succeeded"],
     // });
 
-    const report = await stripe.reporting.reportRuns.retrieve(
-      "frr_1M7IG6BVhoJP270LbId4rxLw"
-    );
+    // const report = await stripe.reporting.reportRuns.retrieve(
+    //   "frr_1M7IG6BVhoJP270LbId4rxLw"
+    // );
     // reportRun.id
-
     res.status(200).send({
-      // payment_total,
-      // fee_total,
-      // net_total,
+      payment_total,
+      fee_total,
+      net_total,
       // refund,
+      // charges,
       // reportRun,
-      report,
+      // report,
       // webhookEndpoint,
     });
   } catch (error) {
     console.log(error);
     return res
-      .status(400)
+      .status(500)
       .send({ error: { code: error.code, message: error.raw?.message } });
   }
 });
