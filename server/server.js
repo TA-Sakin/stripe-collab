@@ -166,6 +166,7 @@ app.post("/lessons", async (req, res) => {
       customer_id: setupIntent.customer,
     });
   } catch (e) {
+    console.log("lessons route", e);
     return res.status(400).send({
       error: {
         message: e.message,
@@ -237,6 +238,7 @@ app.post("/schedule-lesson", async (req, res) => {
       payment: paymentIntent,
     });
   } catch (error) {
+    console.log("schedule lesson", error);
     res.status(400).send({
       error: {
         code: error.code,
@@ -284,10 +286,9 @@ app.post("/complete-lesson-payment", async (req, res) => {
     //   payment_intent_id,
     //   { payment_method: "pm_card_visa" }
     // );
-    console.log("data", paymentIntent);
     res.status(200).send({ payment: paymentIntent });
   } catch (error) {
-    console.log(error);
+    console.log("complete lesson", error);
     res.status(400).send({
       error: {
         code: error.code,
@@ -337,7 +338,7 @@ app.post("/refund-lesson", async (req, res) => {
       refund: refund.id,
     });
   } catch (error) {
-    console.log(error);
+    console.log("refund lesson", error);
     return res.status(400).send({
       error: {
         code: error.code,
@@ -370,7 +371,7 @@ app.get("/account-update/:customer_id", async (req, res) => {
       email: customer.email,
     });
   } catch (error) {
-    console.log(error);
+    console.log("account update get", error);
     return res
       .status(400)
       .send({ error: { code: error.code, message: error.raw?.message } });
@@ -417,7 +418,7 @@ app.post("/account-update/:customer_id", async (req, res) => {
     // const result = {customer}
     res.status(200).send({ clientSecret: setupIntent.client_secret });
   } catch (error) {
-    console.log("error", error);
+    console.log("account update post", error);
     return res
       .status(400)
       .send({ error: { code: error.code, message: error.raw?.message } });
@@ -485,12 +486,13 @@ app.post("/delete-account/:customer_id", async (req, res) => {
       });
     }
   } catch (error) {
-    console.log(error);
+    console.log("delete account", error);
     return res
       .status(400)
       .send({ error: { code: error.code, message: error.raw?.message } });
   }
 });
+
 // Milestone 4: '/calculate-lesson-total'
 // Returns the total amounts for payments for lessons, ignoring payments
 // for videos and concert tickets.
@@ -499,133 +501,59 @@ app.post("/delete-account/:customer_id", async (req, res) => {
 
 // Returns a JSON response of the format:
 // {
-//  payment_total: total before fees and refunds (including disputes), and excluding payments
-//     that haven't yet been captured.
+//  payment_total: total before fees and refunds (including disputes), and excluding payments that haven't yet been captured.
 //     This should be equivalent to net + fee totals.
 //      fee_total: total amount in fees that the store has paid to Stripe
 //      net_total: net amount the store has earned from the payments.
 // }
 
-// ----------
-
-// app.post(
-//   "/webhook",
-//   express.raw({ type: "application/json" }),
-//   (request, response) => {
-//     const sig = request.headers["stripe-signature"];
-//     let event;
-//     try {
-//       event = stripe.webhooks.constructEvent(
-//         request.body,
-//         sig,
-//         process.env.STRIPE_WEBHOOK_SECRET
-//       );
-//       console.log("event", event);
-//     } catch (err) {
-//       response.status(400).send(`Webhook Error: ${err.message}`);
-//       return;
-//     }
-
-//     // Handle the event
-//     console.log(`Unhandled event type ${event.type}`);
-
-//     // Return a 200 response to acknowledge receipt of the event
-//     response.send();
-//   }
-// );
-
 app.get("/calculate-lesson-total", async (req, res) => {
   try {
-    const today = new Date();
-    //today.setUTCHours(); //today's start time
-    let todayInUTC = new Date(
-      today.getUTCFullYear(),
-      today.getUTCMonth(),
-      today.getUTCDate(),
-      today.getUTCHours(),
-      today.getUTCMinutes(),
-      today.getUTCSeconds()
-    );
-
-    //today's start time in utc
-    const interval_end = Math.floor(todayInUTC.getTime() / 1000);
+    let currentTime = Date.now() / 1000;
+    currentTime = Math.floor(currentTime);
+    let todaysStartTime = new Date();
+    //today's start time in second
+    todaysStartTime = todaysStartTime.setUTCHours(0, 0, 0, 0) / 1000;
 
     const numOfDays = 86400 * 7; //number of days in sec
 
     // start of the last week in utc
-    const interval_start = interval_end - numOfDays;
-    // console.log(
-    //   "interval_end",
-    //   interval_end,
-    //   "interval_start",
-    //   interval_start,
-    //   startDayInUTC
-    // );
+    const interval_start = todaysStartTime - numOfDays;
+
     let payment_total = 0,
       net_total = 0,
       fee_total = 0;
     refund = 0;
+    let balanceTransactions = {};
     let charges = {};
 
     const checkHasMore = async () => {
       charges = await stripe.charges.list({
         limit: 100,
-        created: {
-          gte: interval_start,
-        },
+        // created: {
+        //   gte: interval_start,
+        // },
+        expand: ["data.balance_transaction"],
       });
 
       charges.data.forEach((charge) => {
-        if (charge.captured) {
-          payment_total +=
-            charge.amount -
-            (charge.application_fee_amount +
-              charge.amount_refunded +
-              charge.dispute);
+        const { balance_transaction } = charge;
+        if (balance_transaction) {
+          payment_total += balance_transaction.amount - charge.amount_refunded;
+          fee_total += balance_transaction.fee;
         }
-        fee_total += charge.application_fee_amount;
       });
-
       net_total = payment_total - fee_total;
-
-      if (charges.has_more) {
-        checkHasMore();
-      }
     };
     await checkHasMore();
 
-    // console.log("interval_end", interval_end, "start", interval_start);
-
-    // const reportRun = await stripe.reporting.reportRuns.create({
-    //   report_type: "balance.summary.1",
-    //   parameters: {
-    //     // currency: "usd",
-    //     interval_start,
-    //     interval_end,
-    //   },
-    // });
-
-    // const webhookEndpoint = await stripe.webhookEndpoints.create({
-    //   url: "http://localhost:4242/webhook",
-    //   enabled_events: ["reporting.report_run.succeeded"],
-    // });
-
-    // const report = await stripe.reporting.reportRuns.retrieve(
-    //   "frr_1M7IG6BVhoJP270LbId4rxLw"
-    // );
-    // reportRun.id
     res.status(200).send({
       payment_total,
       fee_total,
       net_total,
-      // refund,
-      // charges,
-      // reportRun,
-      // report,
-      // webhookEndpoint,
     });
   } catch (error) {
-    console.log(error);
+    console.log("lesson total route", error);
     return res
       .status(500)
       .send({ error: { code: error.code, message: error.raw?.message } });
@@ -637,9 +565,9 @@ app.get("/calculate-lesson-total", async (req, res) => {
 // The last attempt to make a payment for that customer failed.
 // The payment method associated with that customer is the same payment method used
 // for the failed payment, in other words, the customer has not yet supplied a new payment method.
-//
+
 // Example request: curl -X GET http://localhost:4242/find-customers-with-failed-payments
-//
+
 // Returns a JSON response with information about each customer identified and
 // their associated last payment
 // attempt and, info about the payment method on file.
@@ -663,7 +591,73 @@ app.get("/calculate-lesson-total", async (req, res) => {
 //   <customer_id>: {},
 //   <customer_id>: {},
 // ]
-app.get("/find-customers-with-failed-payments", async (req, res) => {});
+app.get("/find-customers-with-failed-payments", async (req, res) => {
+  try {
+    let response = {};
+    let todaysStartTime = new Date();
+    //today's start time in seconds
+    todaysStartTime = todaysStartTime.setUTCHours(0, 0, 0, 0) / 1000;
+
+    //number of days in seconds
+    const numOfDaysInSec = 86400 * 7;
+
+    // start of the last week in utc
+    const interval_start = todaysStartTime - numOfDaysInSec;
+
+    const paymentIntents = await stripe.paymentIntents.list({
+      limit: 100,
+      // created: {
+      //   gte: interval_start,
+      // },
+    });
+
+    const customers = await stripe.customers.list({ limit: 100 });
+    outerLoop: for (const customer of customers.data) {
+      for (const paymentIntent of paymentIntents.data) {
+        const { status } = paymentIntent;
+        if (status !== "succeded") {
+          // const customer = await stripe.customers.retrieve(
+          //   paymentIntent.customer
+          // );
+          // const paymentIntent = await stripe.paymentIntents.retrieve(
+          //   payment_intent
+          // );
+          if (
+            paymentIntent.last_payment_error?.source?.id ===
+            customer.default_source
+          ) {
+            console.log(customer.id);
+            response[customer.id] = {
+              customer: {
+                email: customer.email,
+                name: customer.name,
+              },
+              payment_intent: {
+                created: paymentIntent.created,
+                description: paymentIntent.description,
+                status: "failed",
+                error: "issuer_declined",
+              },
+              payment_method: {
+                last4: paymentIntent.last_payment_error.source.last4,
+                brand:
+                  paymentIntent.last_payment_error.source.brand.toLowerCase(),
+              },
+            };
+            break outerLoop;
+          }
+        }
+      }
+    }
+    console.log([response]);
+    res.status(200).send([response]);
+  } catch (error) {
+    console.log("failed payment route", error);
+    return res
+      .status(500)
+      .send({ error: { code: error.code, message: error.raw?.message } });
+  }
+});
 
 function errorHandler(err, req, res, next) {
   res.status(500).send({ error: { message: err.message } });
