@@ -135,7 +135,6 @@ app.post("/lessons", async (req, res) => {
       email: email,
       limit: 1,
     });
-    // console.log("customers list", customers);
 
     if (customers.data.length > 0 && customers.data[0].default_source) {
       return res.status(403).json({
@@ -149,21 +148,32 @@ app.post("/lessons", async (req, res) => {
       email: email,
       metadata: { first_lesson: first_lesson },
     });
-    // console.log("create customer", customer);
 
     const setupIntent = await stripe.setupIntents.create({
       customer: customer.id,
       payment_method_types: ["card"],
+      payment_method_options: {
+        card: {
+          request_three_d_secure: "any",
+        },
+      },
     });
 
-    await stripe.customers.createSource(customer.id, {
+    const source = await stripe.customers.createSource(customer.id, {
       source: token,
     });
-    // console.log("card", card);
-
+    console.log(
+      "source",
+      source,
+      "customer",
+      customer,
+      "setupintent",
+      setupIntent
+    );
     res.send({
       clientSecret: setupIntent.client_secret,
       customer_id: setupIntent.customer,
+      last4: source.last4,
     });
   } catch (e) {
     console.log("lessons route", e);
@@ -224,7 +234,13 @@ app.post("/schedule-lesson", async (req, res) => {
   try {
     const data = req.body;
     const { customer_id, amount, description } = data;
-
+    if (!customer_id || amount < 1 || !description) {
+      return res.status(400).send({
+        error: {
+          message: "Invalid parameters",
+        },
+      });
+    }
     const paymentIntent = await stripe.paymentIntents.create({
       customer: customer_id,
       amount: amount,
@@ -333,7 +349,7 @@ app.post("/refund-lesson", async (req, res) => {
       payment_intent: payment_intent_id,
       amount: amount,
     });
-    // console.log(refund);
+
     res.status(200).send({
       refund: refund.id,
     });
@@ -402,19 +418,43 @@ app.post("/account-update/:customer_id", async (req, res) => {
     if (!token && customer) {
       return res.status(200).send(customer);
     }
-
-    const paymentMethod = await stripe.paymentMethods.update(payment_method, {
-      billing_details: { name, email },
-    });
-
+    const listPaymentMethods = await stripe.customers.listPaymentMethods(
+      customer_id,
+      { type: "card" }
+    );
+    const listPayment = listPaymentMethods.data.filter(
+      (pm) => pm.id === payment_method
+    );
+    if (listPayment[0]?.id) {
+      const detachedPaymentMethod = await stripe.paymentMethods.detach(
+        payment_method
+      );
+    }
+    console.log(
+      "list payment",
+      listPayment,
+      "listPaymentMethods",
+      listPaymentMethods,
+      "payment method",
+      payment_method
+    );
+    // const paymentMethod = await stripe.paymentMethods.update(payment_method, {
+    //   billing_details: { name, email },
+    // });
     const setupIntent = await stripe.setupIntents.create({
       customer: customer.id,
       payment_method_types: ["card"],
+      payment_method_options: {
+        card: {
+          request_three_d_secure: "any",
+        },
+      },
     });
 
     await stripe.customers.createSource(customer.id, {
       source: token.id,
     });
+
     // const result = {customer}
     res.status(200).send({ clientSecret: setupIntent.client_secret });
   } catch (error) {
@@ -509,27 +549,25 @@ app.post("/delete-account/:customer_id", async (req, res) => {
 
 app.get("/calculate-lesson-total", async (req, res) => {
   try {
-    let currentTime = Date.now() / 1000;
-    currentTime = Math.floor(currentTime);
-    let todaysStartTime = new Date();
-    //today's start time in second
-    todaysStartTime = todaysStartTime.setUTCHours(0, 0, 0, 0) / 1000;
+    // let currentTime = Date.now() / 1000;
+    // currentTime = Math.floor(currentTime);
+    // let todaysStartTime = new Date();
+    // //today's start time in second
+    // todaysStartTime = todaysStartTime.setUTCHours(0, 0, 0, 0) / 1000;
 
-    const numOfDays = 86400 * 7; //number of days in sec
+    // const numOfDays = 86400 * 7; //number of days in sec
 
-    // start of the last week in utc
-    const interval_start = todaysStartTime - numOfDays;
+    // // start of the last week in utc
+    // const interval_start = todaysStartTime - numOfDays;
 
     let payment_total = 0,
       net_total = 0,
       fee_total = 0;
     refund = 0;
-    let balanceTransactions = {};
     let charges = {};
 
     const checkHasMore = async () => {
       charges = await stripe.charges.list({
-        limit: 100,
         // created: {
         //   gte: interval_start,
         // },
@@ -537,12 +575,15 @@ app.get("/calculate-lesson-total", async (req, res) => {
       });
 
       charges.data.forEach((charge) => {
-        const { balance_transaction } = charge;
-        if (balance_transaction) {
-          payment_total += balance_transaction.amount - charge.amount_refunded;
-          fee_total += balance_transaction.fee;
+        const { balance_transaction, amount_refunded, metadata } = charge;
+        if (metadata.type === "lessons-payments") {
+          if (balance_transaction) {
+            payment_total += balance_transaction.amount - amount_refunded;
+            fee_total += balance_transaction.fee;
+          }
         }
       });
+
       net_total = payment_total - fee_total;
     };
     await checkHasMore();

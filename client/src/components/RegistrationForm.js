@@ -17,8 +17,8 @@ const RegistrationForm = ({ selected, details, sessions }) => {
   const [disabled, setDisabled] = useState(true);
   const [cardError, setCardError] = useState("");
   const [nameemail, setNameemail] = useState({});
+  const [emailError, setEmailError] = useState(false);
   const handleCard = (e) => {
-    // console.log("handlecard", e);
     if (e.complete) {
       setLoading(false);
     } else {
@@ -34,7 +34,7 @@ const RegistrationForm = ({ selected, details, sessions }) => {
     setNameemail({ ...nameemail, [e.target.name]: e.target.value });
   };
   useEffect(() => {
-    // console.log("name and email", nameemail);
+    //rerender component if name or email changes
   }, [nameemail]);
 
   const handleSubmit = async (event) => {
@@ -61,22 +61,22 @@ const RegistrationForm = ({ selected, details, sessions }) => {
       if (error) {
         throw error;
       }
-      // console.log(token);
-
       const { data } = await axios.post("http://localhost:4242/lessons", {
         name,
         email,
         token: token.id,
         first_lesson: sessions[selected].title,
       });
-      // fetch(url).then(res=>res.json()).then(data=>{data.clientSecret,data.customer_id})
-      setUserInfo({
-        name,
-        email,
-        last4: token.card.last4,
-        customer_id: data.customer_id,
-      });
-
+      if (data) {
+        setUserInfo({
+          name,
+          email,
+          last4: data.last4,
+          customer_id: data.customer_id,
+        });
+      }
+      // if (userInfo?.customer_id) {
+      // }
       stripe
         .confirmCardSetup(data.clientSecret, {
           payment_method: {
@@ -90,9 +90,9 @@ const RegistrationForm = ({ selected, details, sessions }) => {
         .then(function (result) {
           if (result.error) {
             // setActive(false);
+            console.log("card setup error", result.error);
             setProcessing(false);
             setCardError(result.error.message);
-            console.log(card);
           } else {
             if (result.setupIntent.status === "succeeded") {
               setActive(true);
@@ -109,13 +109,17 @@ const RegistrationForm = ({ selected, details, sessions }) => {
           customer_id: error.response.data?.customer_id,
         });
         setError(true);
+        setEmailError(true);
       } else if (
         error.response?.data.error.message == "Your card was declined."
       ) {
         setCardError("Your card has been declined.");
+        setEmailError(false);
       } else if (error.message) {
+        setEmailError(true);
         setCardError(error.message);
       } else {
+        setEmailError(true);
         setCardError(error);
       }
     }
@@ -194,7 +198,7 @@ const RegistrationForm = ({ selected, details, sessions }) => {
               className="sr-field-error"
               id="customer-exists-error"
               role="alert"
-              hidden={!error}
+              hidden={!error || !emailError}
             >
               A customer with the email address of{" "}
               <span id="error_msg_customer_email"></span> already exists. If

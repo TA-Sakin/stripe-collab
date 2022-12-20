@@ -31,15 +31,12 @@ const UpdateCustomer = ({
   }, [name, email]);
 
   const handleCard = (e) => {
-    console.log("handle card", e);
     if (!e.complete) {
       setLoading(true);
     }
     if (e.empty) {
       setLoading(false);
     }
-    // if (e.empty && !e.complete) {
-    // }
     if (e.complete) {
       setLoading(false);
       setCardInserted(true);
@@ -49,7 +46,6 @@ const UpdateCustomer = ({
   const handleReady = (e) => {
     setDisabled(false);
   };
-  // http://localhost:3000/account-update/cus_Mozc8lzOsERSRI
 
   const handleChange = (e) => {
     if (e.target.name === "email") {
@@ -83,7 +79,6 @@ const UpdateCustomer = ({
 
     try {
       if (!cardInserted) {
-        console.log("card not inserted", cardInserted);
         const { data } = await axios.post(
           `http://localhost:4242/account-update/${customer_id}`,
           {
@@ -97,10 +92,8 @@ const UpdateCustomer = ({
           setReload((prevState) => !prevState);
         }
       } else {
-        console.log("card inserted", cardInserted);
         const { token, error } = await stripe.createToken(card);
         if (error) {
-          console.log("token", error, card);
           throw error;
         }
 
@@ -127,7 +120,7 @@ const UpdateCustomer = ({
           .then(function (result) {
             if (result.error) {
               // setActive(false);
-              console.log(result.error);
+              console.log("card ", result.error);
               setProcessing(false);
               setCardError(result.error.message);
             } else {
@@ -142,21 +135,20 @@ const UpdateCustomer = ({
       }
     } catch (error) {
       setProcessing(false);
-      if (
-        // error.response?.status === 403 ||
-        error.response?.data?.error === "Customer email already exists"
-      ) {
+      if (error.response?.data?.error === "Customer email already exists") {
         setEmailError(true);
       } else if (
         error.response?.data?.error?.message == "Your card was declined."
       ) {
         setCardError("Your card has been declined.");
-        setEmailError(false);
-      } else if (error.message) {
-        setCardError(error.message);
+      } else if (error.response?.data?.error?.message.includes("card")) {
+        console.log("else if account update", error);
+        setCardError(error.response?.data?.error?.message);
+      } else if (error.response?.data?.error?.message.includes("email")) {
         setEmailError(true);
       } else {
-        setCardError(error);
+        console.log("else update", error);
+        setCardError(error.message);
         setEmailError(true);
       }
     }
