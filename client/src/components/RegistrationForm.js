@@ -102,6 +102,7 @@ const RegistrationForm = ({ selected, details, sessions }) => {
         });
     } catch (error) {
       setProcessing(false);
+      // https://stripe.com/docs/api/errors/handling
 
       if (error.response?.status === 403) {
         setUserInfo({
